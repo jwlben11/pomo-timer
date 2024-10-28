@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com;">
   <title>StudyFlow</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -18,27 +18,120 @@
     <main class="main">
       <!-- Timer View -->
       <section id="timer-view" class="view active">
-        <div class="timer-display">
-          <div class="timer-circle">
-            <svg class="progress-ring" width="250" height="250">
-              <circle class="progress-ring-circle" stroke-width="8" fill="transparent" r="116" cx="125" cy="125"/>
-            </svg>
-            <div class="timer-text">
-              <span id="time-display">25:00</span>
-              <span id="session-type">Focus Time</span>
+        <!-- Update the pre-session form structure -->
+        <div id="pre-session-form" class="pre-session-form">
+          <div class="setting-item">
+            <label for="session-goal">What are you trying to accomplish?</label>
+            <textarea 
+              id="session-goal" 
+              placeholder="Enter your goal for this session"
+              required
+            ></textarea>
+          </div>
+
+          <div class="setting-item">
+            <label for="session-start">How will you get started?</label>
+            <textarea 
+              id="session-start" 
+              rows="2"
+              placeholder="List your first steps"
+              required
+            ></textarea>
+          </div>
+
+          <div class="setting-item">
+            <label for="session-hazards">Any hazards present?</label>
+            <textarea 
+              id="session-hazards" 
+              rows="2"
+              placeholder="Note potential distractions or obstacles"
+              required
+            ></textarea>
+          </div>
+
+          <div class="flex">
+            <div class="flex-1">
+              <label for="energy-level">Energy Level</label>
+              <select id="energy-level" required>
+                <option value="">Select...</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            
+            <div class="flex-1">
+              <label for="morale-level">Morale Level</label>
+              <select id="morale-level" required>
+                <option value="">Select...</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
             </div>
           </div>
-        </div>
-        
-        <div class="timer-controls">
-          <button id="start-btn" class="primary-btn">Start</button>
-          <button id="pause-btn" class="secondary-btn" disabled>Pause</button>
-          <button id="skip-btn" class="secondary-btn">Skip</button>
+
+          <button id="start-session" class="primary-btn">Start Session</button>
         </div>
 
-        <div class="session-info">
-          <span id="session-count">Session 1/4</span>
-          <span id="daily-total">Total: 0h 25m</span>
+        <!-- Existing timer display (will be hidden initially) -->
+        <div id="timer-container" class="timer-container hidden">
+          <div class="timer-display">
+            <div class="timer-circle">
+              <svg class="progress-ring" width="250" height="250">
+                <circle class="progress-ring-circle" stroke-width="8" fill="transparent" r="116" cx="125" cy="125"/>
+              </svg>
+              <div class="timer-text">
+                <span id="time-display">25:00</span>
+                <span id="session-type">Focus Time</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="timer-controls">
+            <button id="goal-btn" class="secondary-btn">Goal</button>
+            <button id="toggle-btn" class="primary-btn">Start</button>
+            <button id="skip-btn" class="secondary-btn">Skip</button>
+          </div>
+
+          <div class="session-info">
+            <span id="session-count">Session 1/4</span>
+            <span id="daily-total">Total: 0h 25m</span>
+          </div>
+        </div>
+
+        <!-- Add this new overlay markup right before the closing timer-container div -->
+        <div id="goal-overlay" class="goal-overlay hidden">
+          <div class="goal-content">
+            <div class="goal-header">
+              <h3>Session Details</h3>
+              <button id="close-goal" class="close-btn">&times;</button>
+            </div>
+            <div class="goal-details">
+              <div class="detail-item">
+                <label>Goal</label>
+                <p id="goal-text"></p>
+              </div>
+              <div class="detail-item">
+                <label>Getting Started</label>
+                <p id="start-text"></p>
+              </div>
+              <div class="detail-item">
+                <label>Potential Hazards</label>
+                <p id="hazards-text"></p>
+              </div>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <label>Energy Level</label>
+                  <p id="energy-text"></p>
+                </div>
+                <div class="detail-item">
+                  <label>Morale Level</label>
+                  <p id="morale-text"></p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

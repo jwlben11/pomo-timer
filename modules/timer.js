@@ -4,8 +4,7 @@ export class Timer {
     this.sessionType = document.getElementById('session-type');
     this.sessionCount = document.getElementById('session-count');
     this.dailyTotal = document.getElementById('daily-total');
-    this.startBtn = document.getElementById('start-btn');
-    this.pauseBtn = document.getElementById('pause-btn');
+    this.toggleBtn = document.getElementById('toggle-btn');
     this.skipBtn = document.getElementById('skip-btn');
     this.progressRing = document.querySelector('.progress-ring-circle');
     
@@ -30,40 +29,76 @@ export class Timer {
         this.handleSessionComplete(message.newState);
       }
     });
+    
+    this.preSessionForm = document.getElementById('pre-session-form');
+    this.timerContainer = document.getElementById('timer-container');
+    this.startSessionBtn = document.getElementById('start-session');
+    
+    this.setupPreSessionForm();
+    
+    // Add click handler for toggle button
+    this.toggleBtn.addEventListener('click', () => {
+      if (this.isRunning) {
+        this.pause();
+      } else {
+        this.start();
+      }
+    });
+    
+    // Add click handler for skip button
+    this.skipBtn.addEventListener('click', () => {
+      this.skip();
+    });
+    
+    // Add new properties for goal overlay
+    this.goalBtn = document.getElementById('goal-btn');
+    this.goalOverlay = document.getElementById('goal-overlay');
+    this.closeGoalBtn = document.getElementById('close-goal');
+    this.currentSessionInfo = null;
+    
+    // Add event listeners for goal overlay
+    this.goalBtn.addEventListener('click', () => this.showGoalOverlay());
+    this.closeGoalBtn.addEventListener('click', () => this.hideGoalOverlay());
+    this.goalOverlay.addEventListener('click', (e) => {
+      if (e.target === this.goalOverlay) {
+        this.hideGoalOverlay();
+      }
+    });
   }
 
   initialize() {
     // Get current timer state from background
     chrome.runtime.sendMessage({ type: 'GET_TIMER_STATE' }, (response) => {
-      if (response && response.isRunning) {
+      if (response) {
         this.isRunning = response.isRunning;
         this.currentTime = response.currentTime;
-        this.totalTime = response.totalTime;
+        this.totalTime = response.totalTime || response.currentTime; // Add fallback
         this.currentSession = response.currentSession;
-        this.sessionType = response.sessionType;
+        this.sessionType.textContent = response.sessionType;
+        this.currentSessionInfo = response.sessionInfo;
         
-        // Update UI
-        this.updateDisplay();
-        this.setupProgressRing();
-        this.updateSessionInfo();
-        
-        // Update button states
-        this.startBtn.disabled = this.isRunning;
-        this.pauseBtn.disabled = !this.isRunning;
-      } else {
-        // Initialize with default settings if no timer is running
-        chrome.storage.sync.get({
-          focusDuration: 25,
-          breakDuration: 5,
-          longBreakDuration: 15
-        }, (settings) => {
-          this.settings = settings;
-          this.currentTime = settings.focusDuration * 60;
-          this.totalTime = this.currentTime;
+        // Check if we should show timer or form
+        if (response.currentTime > 0 || response.sessionType !== 'Focus Time') {
+          // Show timer container and hide pre-session form
+          this.preSessionForm.classList.add('hidden');
+          this.timerContainer.classList.remove('hidden');
+          
+          // If there's session info, update the goal overlay
+          if (this.currentSessionInfo) {
+            this.updateGoalOverlay(this.currentSessionInfo);
+          }
+          
+          // Update UI
           this.updateDisplay();
           this.setupProgressRing();
           this.updateSessionInfo();
-        });
+          
+          // Update toggle button state
+          this.toggleBtn.textContent = this.isRunning ? 'Pause' : 'Start';
+          if (this.isRunning) {
+            this.toggleBtn.classList.add('active');
+          }
+        }
       }
     });
   }
@@ -87,18 +122,26 @@ export class Timer {
     this.progressRing.style.strokeDashoffset = offset;
   }
 
-  start() {
+  start(sessionInfo = null) {
     if (!this.isRunning) {
       this.isRunning = true;
-      this.startBtn.disabled = true;
-      this.pauseBtn.disabled = false;
+      
+      // Store session info
+      if (sessionInfo) {
+        this.currentSessionInfo = sessionInfo;
+      }
+      
+      // Update toggle button
+      this.toggleBtn.textContent = 'Pause';
+      this.toggleBtn.classList.add('active');
       
       chrome.runtime.sendMessage({
         type: 'START_TIMER',
         currentTime: this.currentTime,
         totalTime: this.totalTime,
         currentSession: this.currentSession,
-        sessionType: this.sessionType.textContent
+        sessionType: this.sessionType.textContent,
+        sessionInfo
       });
     }
   }
@@ -106,15 +149,33 @@ export class Timer {
   pause() {
     if (this.isRunning) {
       this.isRunning = false;
-      this.startBtn.disabled = false;
-      this.pauseBtn.disabled = true;
+      
+      // Update toggle button
+      this.toggleBtn.textContent = 'Start';
+      this.toggleBtn.classList.remove('active');
       
       chrome.runtime.sendMessage({ type: 'PAUSE_TIMER' });
     }
   }
 
   skip() {
-    chrome.runtime.sendMessage({ type: 'SKIP_TIMER' });
+    // Pause the timer if it's running
+    if (this.isRunning) {
+        this.pause();
+    }
+    
+    // Notify background script and pass current state
+    chrome.runtime.sendMessage({ 
+        type: 'SKIP_TIMER',
+        currentSession: this.currentSession,
+        sessionType: this.sessionType.textContent
+    });
+    
+    // Clear any local intervals just in case
+    if (this.interval) {
+        clearInterval(this.interval);
+        this.interval = null;
+    }
   }
 
   handleSessionComplete(newState) {
@@ -123,14 +184,37 @@ export class Timer {
     this.currentTime = newState.currentTime;
     this.totalTime = newState.currentTime; // Reset totalTime for new session
     this.currentSession = newState.currentSession;
-    this.sessionType.textContent = newState.sessionType;
+    
+    // Fix: Check if sessionType is a string or DOM element
+    if (typeof newState.sessionType === 'string') {
+      this.sessionType.textContent = newState.sessionType;
+    } else {
+      this.sessionType = newState.sessionType;
+    }
+
+    // Show pre-session form ONLY if next session is Focus Time AND timer is not running
+    if (newState.sessionType === 'Focus Time' && !this.isRunning) {
+      this.preSessionForm.classList.remove('hidden');
+      this.timerContainer.classList.add('hidden');
+    } else {
+      // For breaks or running sessions, keep timer visible and update display
+      this.preSessionForm.classList.add('hidden');
+      this.timerContainer.classList.remove('hidden');
+    }
+
+    // Reset session info if moving to a break
+    if (newState.sessionType !== 'Focus Time') {
+      this.currentSessionInfo = null;
+    }
 
     // Update UI
-    this.startBtn.disabled = false;
-    this.pauseBtn.disabled = true;
     this.updateDisplay();
     this.updateProgressRing();
     this.updateSessionInfo();
+    
+    // Reset toggle button
+    this.toggleBtn.textContent = 'Start';
+    this.toggleBtn.classList.remove('active');
   }
 
   updateDisplay() {
@@ -138,5 +222,83 @@ export class Timer {
     const seconds = this.currentTime % 60;
     this.timeDisplay.textContent = 
       `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  setupPreSessionForm() {
+    this.startSessionBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      
+      // Validate form
+      const goal = document.getElementById('session-goal').value.trim();
+      const start = document.getElementById('session-start').value.trim();
+      const hazards = document.getElementById('session-hazards').value.trim();
+      const energy = document.getElementById('energy-level').value;
+      const morale = document.getElementById('morale-level').value;
+      
+      if (!goal || !start || !hazards || !energy || !morale) {
+        alert('Please fill in all fields');
+        return;
+      }
+      
+      // Collect session info
+      const sessionInfo = {
+        goal,
+        start,
+        hazards,
+        energy,
+        morale,
+        startTime: Date.now()
+      };
+      
+      // Hide form and show timer
+      this.preSessionForm.classList.add('hidden');
+      this.timerContainer.classList.remove('hidden');
+      
+      // Set initial time for focus session
+      chrome.storage.sync.get({ focusDuration: 25 }, (settings) => {
+        this.currentTime = settings.focusDuration * 60;
+        this.totalTime = this.currentTime;
+        this.sessionType.textContent = 'Focus Time';
+        
+        // Update display before starting
+        this.updateDisplay();
+        this.setupProgressRing();
+        
+        // Start timer with session info
+        this.start(sessionInfo);
+      });
+    });
+  }
+
+  showGoalOverlay() {
+    if (!this.currentSessionInfo) return;
+    
+    // Update overlay content
+    document.getElementById('goal-text').textContent = this.currentSessionInfo.goal;
+    document.getElementById('start-text').textContent = this.currentSessionInfo.start;
+    document.getElementById('hazards-text').textContent = this.currentSessionInfo.hazards;
+    document.getElementById('energy-text').textContent = this.currentSessionInfo.energy;
+    document.getElementById('morale-text').textContent = this.currentSessionInfo.morale;
+    
+    // Show overlay with animation
+    this.goalOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      this.goalOverlay.classList.add('visible');
+    });
+  }
+
+  hideGoalOverlay() {
+    this.goalOverlay.classList.remove('visible');
+    setTimeout(() => {
+      this.goalOverlay.classList.add('hidden');
+    }, 200); // Match transition duration
+  }
+
+  updateGoalOverlay(sessionInfo) {
+    document.getElementById('goal-text').textContent = sessionInfo.goal;
+    document.getElementById('start-text').textContent = sessionInfo.start;
+    document.getElementById('hazards-text').textContent = sessionInfo.hazards;
+    document.getElementById('energy-text').textContent = sessionInfo.energy;
+    document.getElementById('morale-text').textContent = sessionInfo.morale;
   }
 }

@@ -31,8 +31,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
     case 'SKIP_TIMER':
-      skipTimer();
-      sendResponse({ success: true });
+      handleSkipTimer(message);
       break;
   }
   return true; // Required for async response
@@ -116,15 +115,32 @@ let timerState = {
   totalTime: 0,
   currentSession: 1,
   sessionType: 'Focus Time',
-  interval: null
+  interval: null,
+  sessionInfo: null,
+  lastActiveTime: null
 };
 
 function startTimer(config) {
   timerState = {
     ...timerState,
     ...config,
-    isRunning: true
+    isRunning: true,
+    lastActiveTime: Date.now()
   };
+  
+  // Store complete timer state
+  chrome.storage.local.set({
+    currentSession: {
+      isRunning: timerState.isRunning,
+      currentTime: timerState.currentTime,
+      totalTime: timerState.totalTime || timerState.currentTime,
+      currentSession: timerState.currentSession,
+      sessionType: timerState.sessionType,
+      sessionInfo: timerState.sessionInfo,
+      lastActiveTime: timerState.lastActiveTime,
+      endTime: Date.now() + (timerState.currentTime * 1000)
+    }
+  });
   
   if (timerState.interval) {
     clearInterval(timerState.interval);
@@ -133,7 +149,15 @@ function startTimer(config) {
   timerState.interval = setInterval(() => {
     timerState.currentTime--;
     
-    // Notify popup of time update - with error handling
+    // Update storage with new time
+    chrome.storage.local.set({
+      currentSession: {
+        ...timerState,
+        endTime: Date.now() + (timerState.currentTime * 1000)
+      }
+    });
+    
+    // Notify popup of time update
     chrome.runtime.sendMessage({
       type: 'TIMER_UPDATE',
       currentTime: timerState.currentTime
@@ -154,11 +178,70 @@ function pauseTimer() {
   timerState.isRunning = false;
 }
 
-function skipTimer() {
+function handleSkipTimer(request) {
+  // Clear any existing timer
   if (timerState.interval) {
     clearInterval(timerState.interval);
+    timerState.interval = null;
   }
-  handleTimerComplete();
+
+  // Determine next session type and duration
+  chrome.storage.sync.get({
+    focusDuration: 25,
+    breakDuration: 5,
+    longBreakDuration: 15
+  }, (settings) => {
+    const currentType = request.sessionType;
+    const currentSession = request.currentSession;
+    
+    let nextSessionType, nextDuration, nextSession;
+    
+    if (currentType === 'Focus Time') {
+      // If skipping a focus session, go to break
+      const isLongBreak = currentSession >= 4;
+      nextSessionType = isLongBreak ? 'Long Break' : 'Break';
+      nextDuration = isLongBreak ? settings.longBreakDuration : settings.breakDuration;
+      nextSession = isLongBreak ? 1 : currentSession;
+    } else {
+      // If skipping a break or long break, go to focus
+      nextSessionType = 'Focus Time';
+      nextDuration = settings.focusDuration;
+      nextSession = currentType === 'Long Break' ? 1 : currentSession + 1;
+    }
+
+    // Update timer state
+    timerState = {
+      ...timerState,
+      isRunning: false,
+      currentTime: nextDuration * 60,
+      totalTime: nextDuration * 60,
+      sessionType: nextSessionType,
+      currentSession: nextSession,
+      sessionInfo: null // Clear session info on skip
+    };
+
+    // Notify popup of the new state
+    chrome.runtime.sendMessage({
+      type: 'SESSION_COMPLETE',
+      newState: timerState
+    }).catch(() => {
+      // Ignore error when popup is closed
+    });
+
+    // Update storage
+    chrome.storage.local.set({
+      currentSession: {
+        isRunning: timerState.isRunning,
+        currentTime: timerState.currentTime,
+        totalTime: timerState.totalTime,
+        currentSession: timerState.currentSession,
+        sessionType: timerState.sessionType,
+        sessionInfo: null,
+        lastActiveTime: Date.now(),
+        endTime: Date.now() + (timerState.currentTime * 1000)
+      }
+    });
+  });
 }
 
 function handleTimerComplete() {
@@ -184,11 +267,12 @@ function handleTimerComplete() {
       dailyStats.sessions++;
     }
 
-    // Add session to history
+    // Add session to history with additional info
     history.push({
       timestamp: Date.now(),
       type: timerState.sessionType,
-      duration: timerState.currentTime
+      duration: timerState.currentTime,
+      sessionInfo: timerState.sessionInfo // Add session info to history
     });
 
     // Store updates
@@ -227,14 +311,16 @@ function handleTimerComplete() {
       // Ignore error when popup is closed
     });
 
-    // Store current session state in storage for persistence
-    chrome.storage.sync.set({
+    // Update storage with new session state
+    chrome.storage.local.set({
       currentSession: {
         isRunning: timerState.isRunning,
         currentTime: timerState.currentTime,
-        totalTime: timerState.totalTime,
+        totalTime: timerState.totalTime || timerState.currentTime,
         currentSession: timerState.currentSession,
         sessionType: timerState.sessionType,
+        sessionInfo: timerState.sessionInfo,
+        lastActiveTime: Date.now(),
         endTime: Date.now() + (timerState.currentTime * 1000)
       }
     });
@@ -254,19 +340,38 @@ function sendMessageToPopup(message) {
     // Ignore error when popup is closed
   });
 }
-
 // Initialize timer state from storage when background script starts
-chrome.storage.sync.get(['currentSession'], (result) => {
+chrome.storage.local.get(['currentSession'], (result) => {
   if (result.currentSession) {
-    timerState = {
-      ...timerState,
-      ...result.currentSession,
-      interval: null
-    };
+    const stored = result.currentSession;
+    const now = Date.now();
     
-    // Restart timer if it was running
-    if (timerState.isRunning) {
-      startTimer(timerState);
+    // Calculate remaining time
+    if (stored.endTime && stored.endTime > now) {
+      const remainingTime = Math.ceil((stored.endTime - now) / 1000);
+      
+      timerState = {
+        ...stored,
+        currentTime: remainingTime,
+        interval: null,
+        lastActiveTime: stored.lastActiveTime
+      };
+      
+      // Restart timer if it was running
+      if (stored.isRunning) {
+        startTimer(timerState);
+      }
+    } else if (stored.sessionType !== 'Focus Time' || 
+              (stored.lastActiveTime && (now - stored.lastActiveTime) < 24 * 60 * 60 * 1000)) {
+      // Keep the session state if it's a break or if the last activity was within 24 hours
+      timerState = {
+        ...stored,
+        isRunning: false,
+        interval: null,
+        currentTime: stored.currentTime,
+        lastActiveTime: stored.lastActiveTime
+      };
     }
   }
 });
+

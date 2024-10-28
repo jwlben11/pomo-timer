@@ -10,14 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const analytics = new Analytics();
   const settings = new Settings();
 
-  // Add event listeners for timer controls
-  document.getElementById('start-btn').addEventListener('click', () => timer.start());
-  document.getElementById('pause-btn').addEventListener('click', () => timer.pause());
-  document.getElementById('skip-btn').addEventListener('click', () => timer.skip());
-
-  // Add event listener for settings save
-  document.getElementById('save-settings').addEventListener('click', () => settings.saveSettings());
-
   // Add event listeners for navigation
   const navButtons = document.querySelectorAll('.nav-btn');
   const views = document.querySelectorAll('.view');
@@ -38,6 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
         analytics.updateCharts();
       }
     });
+  });
+
+  // Add event listeners for settings save
+  document.getElementById('save-settings').addEventListener('click', () => {
+    settings.saveSettings();
   });
 
   // Request notification permissions on startup
