@@ -72,13 +72,18 @@ export class Timer {
       if (response) {
         this.isRunning = response.isRunning;
         this.currentTime = response.currentTime;
-        this.totalTime = response.totalTime || response.currentTime; // Add fallback
+        this.totalTime = response.totalTime || response.currentTime;
         this.currentSession = response.currentSession;
         this.sessionType.textContent = response.sessionType;
         this.currentSessionInfo = response.sessionInfo;
         
-        // Check if we should show timer or form
-        if (response.currentTime > 0 || response.sessionType !== 'Focus Time') {
+        // Show timer if:
+        // 1. Timer is running, OR
+        // 2. It's not a Focus Time session, OR
+        // 3. It's a Focus Time session WITH session info
+        if (this.isRunning || 
+            response.sessionType !== 'Focus Time' || 
+            (response.sessionType === 'Focus Time' && this.currentSessionInfo)) {
           // Show timer container and hide pre-session form
           this.preSessionForm.classList.add('hidden');
           this.timerContainer.classList.remove('hidden');
@@ -98,6 +103,10 @@ export class Timer {
           if (this.isRunning) {
             this.toggleBtn.classList.add('active');
           }
+        } else {
+          // Show the pre-session form for Focus Time without session info
+          this.preSessionForm.classList.remove('hidden');
+          this.timerContainer.classList.add('hidden');
         }
       }
     });
@@ -111,14 +120,24 @@ export class Timer {
   }
 
   setupProgressRing() {
-    const circumference = 2 * Math.PI * 116;
-    this.progressRing.style.strokeDasharray = `${circumference} ${circumference}`;
-    this.progressRing.style.strokeDashoffset = circumference;
+    const circle = document.querySelector('.progress-ring-circle');
+    const radius = circle.r.baseVal.value;
+    const circumference = radius * 2 * Math.PI;
+    
+    circle.style.strokeDasharray = `${circumference} ${circumference}`;
+    
+    this.progressRing = circle;
+    this.circumference = circumference;
+    
+    // Immediately update to show current progress
+    this.updateProgressRing();
   }
 
   updateProgressRing() {
-    const circumference = 2 * Math.PI * 116;
-    const offset = circumference - (this.currentTime / this.totalTime) * circumference;
+    if (!this.progressRing) return;
+    
+    const progress = this.currentTime / this.totalTime;
+    const offset = this.circumference * (1 - progress);
     this.progressRing.style.strokeDashoffset = offset;
   }
 
