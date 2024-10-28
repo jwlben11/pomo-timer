@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <title>StudyFlow</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="nav">
+      <button class="nav-btn active" data-view="timer">Timer</button>
+      <button class="nav-btn" data-view="analytics">Analytics</button>
+      <button class="nav-btn" data-view="settings">Settings</button>
+    </nav>
+
+    <main class="main">
+      <!-- Timer View -->
+      <section id="timer-view" class="view active">
+        <div class="timer-display">
+          <div class="timer-circle">
+            <svg class="progress-ring" width="250" height="250">
+              <circle class="progress-ring-circle" stroke-width="8" fill="transparent" r="116" cx="125" cy="125"/>
+            </svg>
+            <div class="timer-text">
+              <span id="time-display">25:00</span>
+              <span id="session-type">Focus Time</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="timer-controls">
+          <button id="start-btn" class="primary-btn">Start</button>
+          <button id="pause-btn" class="secondary-btn" disabled>Pause</button>
+          <button id="skip-btn" class="secondary-btn">Skip</button>
+        </div>
+
+        <div class="session-info">
+          <span id="session-count">Session 1/4</span>
+          <span id="daily-total">Total: 0h 25m</span>
+        </div>
+      </section>
+
+      <!-- Analytics View -->
+      <section id="analytics-view" class="view">
+        <div class="analytics-header">
+          <h2>Your Progress</h2>
+          <select id="time-range">
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+          </select>
+        </div>
+        
+        <div class="chart-container">
+          <canvas id="analytics-chart"></canvas>
+        </div>
+        
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Total Hours</h3>
+            <p id="total-hours">0.0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Sessions</h3>
+            <p id="total-sessions">0</p>
+          </div>
+          <div class="stat-card">
+            <h3>Streak</h3>
+            <p id="current-streak">0 days</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings View -->
+      <section id="settings-view" class="view">
+        <div class="settings-group">
+          <h3>Timer Settings</h3>
+          <div class="setting-item">
+            <label for="focus-duration">Focus Duration (minutes)</label>
+            <input type="number" id="focus-duration" value="25" min="1" max="120">
+          </div>
+          <div class="setting-item">
+            <label for="break-duration">Break Duration (minutes)</label>
+            <input type="number" id="break-duration" value="5" min="1" max="30">
+          </div>
+          <div class="setting-item">
+            <label for="long-break-duration">Long Break Duration (minutes)</label>
+            <input type="number" id="long-break-duration" value="15" min="1" max="60">
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Notifications</h3>
+          <div class="setting-item">
+            <label for="sound-enabled">Sound Notifications</label>
+            <input type="checkbox" id="sound-enabled" checked>
+          </div>
+          <div class="setting-item">
+            <label for="desktop-notifications">Desktop Notifications</label>
+            <input type="checkbox" id="desktop-notifications" checked>
+          </div>
+        </div>
+
+        <button id="save-settings" class="primary-btn">Save Settings</button>
+      </section>
+    </main>
+  </div>
+
+  <script src="lib/chart.js"></script>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
